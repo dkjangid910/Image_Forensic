@@ -1,4 +1,5 @@
 # Copy Paste Forgery detection using EM Algorithm
+The task of this Project was to detect Copy-Paste forgery without using Deep Learning. I have used Expectation-Maximization algorithm given by [A.C. Popescu](https://ieeexplore.ieee.org/document/1381775) to detect forgery.  A probability map is generated as an output of EM algorithm. Fourier transform of probability map is calculated for small patches of the Image, which include both modified part and original part of the image, to detect forgery.
 
 ## Required Libraries:
    1. OpenCv 3.4.2.16 (you can install this version using pip3) 
