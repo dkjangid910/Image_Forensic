@@ -2,7 +2,7 @@ import numpy as np
 import math
 from PIL import Image
 from tempfile import TemporaryFile
-import multiprocess as mp
+#import multiprocess as mp
 import itertools
 from scipy import fftpack
 import cv2
@@ -12,16 +12,18 @@ import skimage
 import matplotlib
 import matplotlib.pyplot as plt
 from scipy import signal
+import argparse
 
 
 def shift_rows_and_cols( arr, i, j_1, rows, cols, N):
-    #import pdb; pdb.set_trace()  
+     
     arr = np.roll(arr, i, axis = 1)  # shift left(-ve) or right(+ve) by ith
    
     arr = np.roll(arr, j_1, axis = 0)  # shift up(-ve) or down(+ve) by jth
 
     arr = arr[N:N+rows, N:N+cols]    
     return arr
+
 
 def create_shifted_version_of_F(F_zero_pad, n, rows, cols):
     
@@ -41,9 +43,8 @@ def create_shifted_version_of_F(F_zero_pad, n, rows, cols):
                j_1 =  j_1 + 1
           i = i + 1
   
-    #import pdb; pdb.set_trace()
-    #F_shift = F_shift[N:N + rows, N : N + cols]  
     return F_shift
+
 
 def calculate_C_matrix(F_shift, W, n):
     
@@ -85,9 +86,8 @@ def calculate_R_matrix(F_shift, F, W, n):
     
     return R_new
 
- 
- 
-def one_time_calculation(F_zero_pad, n , rows, cols, img_path):
+  
+def one_time_calculation(F_zero_pad, n , rows, cols, img_name):
   
       
      rows_zero_pad, cols_zero_pad = F_zero_pad.shape[0], F_zero_pad.shape[1]
@@ -96,21 +96,8 @@ def one_time_calculation(F_zero_pad, n , rows, cols, img_path):
 
      f_sub = np.zeros((n, n, rows, cols))
      
-
-     '''
-     # parrellizing the process
-     p = mp.Pool()
-     
-     def fun(F_zero_pad, N):
-           
-        
-     i = N
-     input = ((i,j) for i, j in itertools.combinations_with_replacement(xrange(N, cols + N),2) if  i  < rows + N)
-
-           = p.map(fun, input)
-
-     '''
      c_r = 0
+
      for i in range(N,  rows+N): 
         c_j = 0
         for j in range(N,  cols+N):
@@ -121,11 +108,16 @@ def one_time_calculation(F_zero_pad, n , rows, cols, img_path):
             
             c_j = c_j + 1
         c_r = c_r + 1 
-  
-    
+     
      r = str(rows)
      c = str(cols)
-     save_file = './numpy_files/'+img_name +'_' + r + c + '.npy'
+  
+     file_dir = 'numpy_files'
+   
+     if not os.path.isdir(f'{file_dir}'):
+        os.mkdir(file_dir)
+
+     save_file = f'{file_dir}/{img_name}_{r}_{c}.npy'
      np.save(save_file, f_sub)
      
      
@@ -136,62 +128,33 @@ def calculate_summation_term(F_zero_pad, alpha, n, rows, cols, img_name):
       
      rows_zero_pad, cols_zero_pad = F_zero_pad.shape[0], F_zero_pad.shape[1]
     
-    
      r = str(rows)
-     c = str(cols)#img_G = img_G[0::2, 0::2]
-     read_path  = './numpy_files/'+img_name +'_' +r + c +'.npy'
+     c = str(cols)
+     read_path  = f'numpy_files/{img_name}_{r}_{c}.npy'
      f_sub = np.load(read_path)
      N = int((n-1)/2)
  
-     #F_out = np.zeros((rows_zero_pad, cols_zero_pad))
      F_out = np.zeros((rows, cols))
-
-    
-     # Parrallize the process
-      
+  
      count = 0
-     #def fun(f_sub):
-     #    F_out = np.zeros((rows, cols))
- 
-     #    F_out[i, j] = np.sum(np.matmul(alpha, f_sub[:,:,i,j].T))
-     #    print (count)
-     #    count = count +1 
-     #    return F_out
-        
- 
-     #p = mp.Pool()
-     #input = ((i ,j) for i,j in itertools.combinations_with_replacement(range(cols),2) if i < rows)
-     
-    # F_out = p.map(fun, input)
-     #import pdb; pdb.set_trace()
-     #p.close()
-    # p.join()
-    
-      
-     alpha_flat = alpha.flatten()    
+     alpha_flat = alpha.flatten() 
+   
      for i in range(0, rows):
          
          for j in range(0, cols):
               
               f_sub_flatten = f_sub[:,:,i,j].flatten()
               F_out[i, j] = np.matmul(alpha_flat, f_sub_flatten)
-    
-              #print(i, j)        
-      
-                  
-     
-     
-     #F_out_final = F_out[N:(rows_zero_pad - N), N: (cols_zero_pad - N)]
-     
-     F_out = F_out / 255 
+         
+     F_out = F_out / 255
+ 
      return F_out
+
  
 def EM_Algo(F, n, threshold, img_name):
     
     alpha = np.random.random_sample((n,n)) # intialize alpha
     sigma = 0.0075     # intialize variance
-
-    
     
     p_0   = (1/256)   # reciprocal to the range of the image range
      
@@ -204,8 +167,7 @@ def EM_Algo(F, n, threshold, img_name):
     alpha[N, N] = 0        # set alpha[0,0] = 0, given in paper
     F_zero_pad = np.pad(F, N)
     rows_zero_pad, cols_zero_pad = F_zero_pad.shape[0], F_zero_pad.shape[1]
-    
-       
+           
     residual = np.zeros((rows, cols))
     P = np.zeros((rows, cols))
     W = np.zeros((rows, cols))
@@ -261,18 +223,23 @@ def EM_Algo(F, n, threshold, img_name):
          
             sigma_old = sigma_new 
             alpha_old = alpha_new
-            print(error)
+            print(f'Error is {error}')
             if (error < threshold):     # stopping condition
                  break
   
 
     return alpha_old, P
 
+
 def DFT_each_block(prob_map,block_size, img_name ):
     
      k = np.array([[-1/4, 1/2, -1/4],[1/2,-1,1/2],[-1/4, 1/2, -1/4]])
      
-     result  = '/home/dkjangid/Desktop/PhD/Fall19/DIP/Project/Image_Forensic/Image_Forensic/results' 
+     result_path  = f'results/{img_name}'
+
+     if not os.path.isdir(f'{result_path}'):
+         os.makedirs(result_path)    
+ 
      rows, cols = prob_map.shape[0], prob_map.shape[1]
     
      plt.imsave('{}_prob_map.jpg'.format(img_name), prob_map, cmap = matplotlib.cm.gray)    
@@ -285,27 +252,20 @@ def DFT_each_block(prob_map,block_size, img_name ):
      no_of_blocks = (rows_new*cols_new) // (block_size * block_size)
      prob_map_block = np.zeros((block_size, block_size, no_of_blocks))
 
-     
-     import pdb; pdb.set_trace()
 
      count = 0
      for i in range(rows // block_size):
          
          for j in range(cols // block_size):
              
-             prob_map_block[:,:,count]   = prob_map[block_size*i:block_size*(i+1), block_size*j:block_size*(j+1)]
+             prob_map_block[:,:,count]   = prob_map[block_size*i:block_size*(i+1), 
+                                                    block_size*j:block_size*(j+1)]
              count = count + 1
- 
 
-     #prob_map_block = np.reshape(prob_map_new, (block_size, block_size, no_of_blocks), order='F')
-
-     import pdb; pdb.set_trace()  
      for count in range(no_of_blocks): 
-                        
 
-
-           plt.imsave(result+'/{}_orgimg/'.format(img_name)+img_name+"_{}.jpg".format(count),prob_map_block[:,:,count], cmap = matplotlib.cm.gray, vmin=0, vmax=1)
-
+           plt.imsave(f'{result_path}/{count}_org_img.jpg', 
+                       prob_map_block[:,:,count], cmap = matplotlib.cm.gray, vmin=0, vmax=1)
            prob_map_1_1 = signal.convolve2d(prob_map_block[:,:,count],k, mode='full')
  
            f = 100 
@@ -314,11 +274,10 @@ def DFT_each_block(prob_map,block_size, img_name ):
            prob_map_fft_1_1 = 20* np.log( np.abs(prob_map_fft_1))
      
            # High Pass Filter
+          
            prob_map_fft_1_hp = prob_map_fft_1_1
-           #prob_map_fft_1_hp = np.zeros((2*rows, 2 * cols))
            prob_map_fft_1_hp[cols-f:cols+f, rows-f:rows+f] = 0
 
-      
            # Blur 
       
            prob_map_fft_1_blur =  skimage.filters.gaussian(prob_map_fft_1_hp, sigma= (5,5))
@@ -328,54 +287,43 @@ def DFT_each_block(prob_map,block_size, img_name ):
      
            prob_map_fft_1_1_scaled[prob_map_fft_1_1_scaled>0.98] = 1
            prob_map_fft_1_1_scaled[prob_map_fft_1_1_scaled<=0.98]= 0
+
            # Gamma Correction
      
            gamma = 2
            prob_map_fft_1_final = np.array(255*(prob_map_fft_1_1_scaled) ** gamma, dtype ='uint8')
+ 
+           plt.imsave(f'{result_path}/{count}_fft_img.jpg', 
+                       prob_map_fft_1_final, cmap = matplotlib.cm.gray)
+ 
 
-           plt.imsave(result+'/{}_fft/'.format(img_name)+img_name+ "fft_{}.jpg".format(count), prob_map_fft_1_final, cmap = matplotlib.cm.gray) 
-           
-     
-if __name__ == "__main__":   
-     n  = 3   # no of parameters
-     threshold = 0.001
-   
-     img_path = '/home/dkjangid/Desktop/PhD/Fall19/DIP/Project/Image_Forensic/Image_Forensic/data/8.jpg'  
-   
+
+def main(args):
+
+         
+     img_path = args["input_img_path"]
+     n = args["num_of_parameters"]
+     threshold = args["threshold"]
       
-     import pdb; pdb.set_trace()
-  
-
+     
+     # Image Reading and taking only single channel
      img  = cv2.imread(img_path)
      img = img[:,:,1]
 
      img_name = os.path.basename(img_path).replace('.jpg', '')
- 
-     # take only one channel
-     #img_R = img[:, :, 1]
-  
-    
-  
-     #dim = (640, 480)
    
      rows_img, cols_img = img.shape[0], img.shape[1]
      dim = (int(cols_img/2), int(rows_img/2))
      img_G = img[0::2, 0::2]
      img_G = img_G/255
-     #img_G = cv2.resize(img_G, dim)
-     #import pdb ; pdb.set_trace()
-     
-     
+          
      para   = str(n)
      save_alpha  ='./numpy_files/' + img_name + para + 'alpha.npy'
      save_p_map  = './numpy_files/'+ img_name + para + 'prob_map.npy'
 
-     
-     
      alpha, prob_map  = EM_Algo(img_G, n, threshold, img_name)
-     
-     #import pdb; pdb.set_trace() 
-     print (alpha)
+      
+     print (f'alpha is {alpha}')
      prob_map = prob_map/np.sum(prob_map)
      
      np.save(save_alpha, alpha)
@@ -387,24 +335,26 @@ if __name__ == "__main__":
      
      prob_map = prob_map/np.amax(prob_map) 
       
-     ''' 
-     prob_map[prob_map>0.4] = 1
-     prob_map[prob_map<=0.4] = 0
-     
-     prob_map = prob_map * 255
-     '''
-     #prob_map = np.uint(prob_map * 255)
-    
      rows, cols = prob_map.shape[0], prob_map.shape[1]
 
      # p_map upsampled by factor of 2
      
      prob_map = cv2.resize(prob_map, (2*cols, 2*rows), interpolation = cv2.INTER_AREA)
      
-     #prob_map[prob_map>0.5] = 1
-     #prob_map[prob_map<=0.5] = 0
-
      DFT_each_block(prob_map, 300, img_name)
 
-      
+
+ 
+if __name__ == "__main__":   
+
+     arg_parse = argparse.ArgumentParser()
+     arg_parse.add_argument("-i", "--input_img_path", required=True, 
+                            help= "Path of Input Image")
+     arg_parse.add_argument("-n", "--num_of_parameters", default=3, 
+                            help= "number of parameters for EM algo")  
+     arg_parse.add_argument("-t", "--threshold", default=0.001, 
+                            help= " Threshold for EM algo")                
+     args = vars(arg_parse.parse_args())
+     main(args)
+           
 
